@@ -7,6 +7,9 @@ import { handleVergabeNiedersachsen } from './hosts/vergabe-niedersachsen';
 import { handleSubreportElvis } from './hosts/subreport-elvis';
 import { handleDtvp } from './hosts/dtvp';
 import { handleVergabekooperationBerlin } from './hosts/vergabekooperation-berlin';
+import { handleVergabeMetropoleruhr } from './hosts/vergabe-metropoleruhr';
+import { handleVergabemarktplatzBrandenburg } from './hosts/vergabemarktplatz-brandenburg';
+import { handleVergabeportalBw } from './hosts/vergabeportal-bw';
 
 // Import general utilities
 import { 
@@ -78,9 +81,30 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                     await browser.close();
                 }
             } else if (documentsPageUrl.includes('subreport-elvis.de')) {
-                const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                const fs = require('fs');
+                const path = require('path');
+                const os = require('os');
+                
+                // Create a temporary download directory
+                const downloadPath = path.join(os.tmpdir(), `subreport_downloads_${Date.now()}`);
+                if (!fs.existsSync(downloadPath)) {
+                    fs.mkdirSync(downloadPath, { recursive: true });
+                }
+                
+                const browser = await puppeteer.launch({ 
+                    headless: false, 
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-features=VizDisplayCompositor'] 
+                });
                 try {
                     const page = await browser.newPage();
+                    
+                    // Set download behavior
+                    const client = await page.target().createCDPSession();
+                    await client.send('Page.setDownloadBehavior', {
+                        behavior: 'allow',
+                        downloadPath: downloadPath
+                    });
+                    
                     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
                     await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
                     
@@ -89,6 +113,32 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                     
                     // Use host-specific handler
                     files = await handleSubreportElvis(page, documentsPageUrl);
+                    
+                    // Wait for downloads to complete and check the download directory
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    
+                    // Read any downloaded files from the directory
+                    const downloadedFiles = fs.readdirSync(downloadPath);
+                    console.log('Downloaded files found:', downloadedFiles);
+                    
+                    for (const fileName of downloadedFiles) {
+                        const filePath = path.join(downloadPath, fileName);
+                        const fileStats = fs.statSync(filePath);
+                        
+                        if (fileStats.size > 1000) { // Only include files larger than 1KB
+                            const buffer = fs.readFileSync(filePath);
+                            console.log(`Adding downloaded file: ${fileName} (${buffer.length} bytes)`);
+                            if (!files) files = new Map();
+                            files.set(fileName, buffer);
+                        }
+                    }
+                    
+                    // Clean up download directory
+                    try {
+                        fs.rmSync(downloadPath, { recursive: true, force: true });
+                    } catch (error) {
+                        console.log('Error cleaning up download directory:', error);
+                    }
                 } finally {
                     await browser.close();
                 }
@@ -119,6 +169,51 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                     
                     // Use host-specific handler
                     files = await handleVergabekooperationBerlin(page, documentsPageUrl);
+                } finally {
+                    await browser.close();
+                }
+            } else if (documentsPageUrl.includes('vergabe.metropoleruhr.de')) {
+                const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                try {
+                    const page = await browser.newPage();
+                    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                    await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
+                    
+                    // Navigate to the page
+                    await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+                    
+                    // Use host-specific handler
+                    files = await handleVergabeMetropoleruhr(page, documentsPageUrl);
+                } finally {
+                    await browser.close();
+                }
+            } else if (documentsPageUrl.includes('vergabemarktplatz.brandenburg.de')) {
+                const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                try {
+                    const page = await browser.newPage();
+                    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                    await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
+                    
+                    // Navigate to the page
+                    await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+                    
+                    // Use host-specific handler
+                    files = await handleVergabemarktplatzBrandenburg(page, documentsPageUrl);
+                } finally {
+                    await browser.close();
+                }
+            } else if (documentsPageUrl.includes('vergabeportal-bw.de')) {
+                const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                try {
+                    const page = await browser.newPage();
+                    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                    await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
+                    
+                    // Navigate to the page
+                    await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+                    
+                    // Use host-specific handler
+                    files = await handleVergabeportalBw(page, documentsPageUrl);
                 } finally {
                     await browser.close();
                 }

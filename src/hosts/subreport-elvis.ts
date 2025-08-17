@@ -200,17 +200,24 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                             const contentType = headers['content-type'] || '';
                             const contentDisposition = headers['content-disposition'] || '';
                             
-                            // Check if this is a file download
+                            console.log(`Response: ${url} | Content-Type: ${contentType} | Content-Disposition: ${contentDisposition}`);
+                            
+                            // Check if this is a file download - be more liberal with detection
                             if (contentDisposition.includes('attachment') || 
                                 contentType.includes('application/pdf') ||
                                 contentType.includes('application/msword') ||
-                                contentType.includes('application/zip')) {
+                                contentType.includes('application/zip') ||
+                                contentType.includes('application/octet-stream') ||
+                                url.includes('securedownload') ||
+                                url.includes('.pdf') ||
+                                url.includes('download')) {
                                 
-                                console.log(`Capturing download: ${url}`);
+                                console.log(`Attempting to capture download: ${url}`);
                                 const buffer = await response.buffer();
+                                console.log(`Buffer size: ${buffer.length} bytes`);
                                 
                                 // Extract filename from content-disposition or URL
-                                let fileName = 'download';
+                                let fileName = 'download.pdf';
                                 if (contentDisposition) {
                                     const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
                                     if (match) {
@@ -226,24 +233,31 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                                         } else {
                                             fileName = 'tender_document.pdf';
                                         }
+                                    } else if (url.includes('.pdf')) {
+                                        // Extract filename from URL if it contains .pdf
+                                        const urlParts = url.split('/');
+                                        const possibleFile = urlParts[urlParts.length - 1];
+                                        if (possibleFile.includes('.pdf')) {
+                                            fileName = possibleFile;
+                                        }
                                     } else {
-                                        fileName = url.split('/').pop() || 'download';
+                                        fileName = url.split('/').pop() || 'download.pdf';
                                     }
                                 }
                                 
-                                // Skip platform documents
-                                if (!fileName.includes('subreport') && 
-                                    !fileName.includes('AGB') && 
-                                    !fileName.includes('Datenschutz') &&
-                                    !fileName.includes('Impressum')) {
+                                // Only skip obviously platform documents, be more inclusive
+                                if (!fileName.toLowerCase().includes('agb') && 
+                                    !fileName.toLowerCase().includes('datenschutz') &&
+                                    !fileName.toLowerCase().includes('impressum') &&
+                                    buffer.length > 1000) { // Only include files larger than 1KB
                                     console.log(`Successfully captured: ${fileName} (${buffer.length} bytes, Content-Type: ${contentType})`);
                                     documents.set(fileName, buffer);
                                 } else {
-                                    console.log(`Skipped platform document: ${fileName}`);
+                                    console.log(`Skipped document: ${fileName} (${buffer.length} bytes)`);
                                 }
                             }
                         } catch (error) {
-                            // Ignore errors in response processing
+                            console.log(`Error processing response: ${error}`);
                         }
                     });
                     
@@ -323,8 +337,220 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                                 }
                             }, doc.buttonIndex);
                             
-                            // Wait for download to process
-                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            // After clicking the download button, wait for popup and handle it
+                            console.log('Waiting for download popup to appear...');
+                            let popupHandled = false;
+                            
+                            for (let attempt = 0; attempt < 10 && !popupHandled; attempt++) {
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                                
+                                // Look for popup with download, login, and registrirung buttons
+                                const popupButtons = await page.evaluate(() => {
+                                    // Look for modal or popup elements
+                                    const modals = Array.from(document.querySelectorAll('.modal, .popup, .dialog, [role="dialog"], .overlay, .ui-dialog'));
+                                    const allButtons = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div'));
+                                    
+                                    // Get buttons from modal if found, otherwise check all visible buttons
+                                    let buttonsToCheck = allButtons;
+                                    if (modals.length > 0) {
+                                        const modal = modals[0];
+                                        const modalButtons = Array.from(modal.querySelectorAll('button, a, input[type="button"], span, div'));
+                                        if (modalButtons.length > 0) {
+                                            buttonsToCheck = modalButtons;
+                                        }
+                                    }
+                                    
+                                    const results: Array<{text: string, index: number, isDownload: boolean}> = [];
+                                    
+                                    for (let i = 0; i < buttonsToCheck.length; i++) {
+                                        const btn = buttonsToCheck[i];
+                                        const text = (btn.textContent || btn.getAttribute('value') || '').toLowerCase().trim();
+                                        
+                                        // Look for download, login, or registrirung buttons
+                                        if (text === 'download' || text === 'herunterladen' || 
+                                            text === 'login' || text === 'anmelden' ||
+                                            text === 'registrirung' || text === 'registrierung') {
+                                            
+                                            // Find the global index of this button
+                                            const globalIndex = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div')).indexOf(btn);
+                                            
+                                            results.push({
+                                                text: text,
+                                                index: globalIndex,
+                                                isDownload: text === 'download' || text === 'herunterladen'
+                                            });
+                                        }
+                                    }
+                                    
+                                    return results;
+                                });
+                                
+                                if (popupButtons.length > 0) {
+                                    console.log('Found popup buttons:', popupButtons);
+                                    
+                                    // Find the download button in the popup
+                                    const downloadButton = popupButtons.find((btn: {text: string, index: number, isDownload: boolean}) => btn.isDownload);
+                                    
+                                    if (downloadButton) {
+                                        console.log(`Clicking popup download button: "${downloadButton.text}"`);
+                                        
+                                                                // Set up listener for new tabs/windows that might open for downloads
+                        const newPagePromise = new Promise<any>((resolve) => {
+                            page.browser().on('targetcreated', async (target: any) => {
+                                if (target.type() === 'page') {
+                                    const newPage = await target.page();
+                                    if (newPage) {
+                                        console.log('New page/tab detected for download');
+                                        resolve(newPage);
+                                    }
+                                }
+                            });
+                            
+                            // Timeout after 10 seconds if no new page opens
+                            setTimeout(() => resolve(null), 10000);
+                        });
+                        
+                        await page.evaluate((buttonIndex: number) => {
+                            const buttons = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div'));
+                            const btn = buttons[buttonIndex] as HTMLElement;
+                            if (btn) {
+                                btn.click();
+                                return true;
+                            }
+                            return false;
+                        }, downloadButton.index);
+                        
+                        console.log('Popup download button clicked successfully');
+                        
+                        // Wait to see if a new page opens for the download
+                        const newPage = await newPagePromise;
+                        if (newPage) {
+                            console.log('New page/tab opened - monitoring for PDF content...');
+                            
+                            let pdfCaptured = false;
+                            
+                            // Set up response listener for the new page to capture PDF content
+                            newPage.on('response', async (response: any) => {
+                                try {
+                                    const url = response.url();
+                                    const headers = response.headers();
+                                    const contentType = headers['content-type'] || '';
+                                    const contentDisposition = headers['content-disposition'] || '';
+                                    
+                                    console.log(`New page response: ${url} | Content-Type: ${contentType}`);
+                                    
+                                    // Check if this is a PDF or document file
+                                    if (contentType.includes('application/pdf') ||
+                                        contentType.includes('application/msword') ||
+                                        contentType.includes('application/zip') ||
+                                        contentType.includes('application/octet-stream') ||
+                                        url.includes('securedownload') ||
+                                        url.includes('.pdf') ||
+                                        url.includes('download')) {
+                                        
+                                        console.log(`Capturing PDF content from new page: ${url}`);
+                                        const buffer = await response.buffer();
+                                        console.log(`PDF file size: ${buffer.length} bytes`);
+                                        
+                                        let fileName = 'tender_document.pdf';
+                                        
+                                        // Try to extract filename from content-disposition
+                                        if (contentDisposition && contentDisposition.includes('filename')) {
+                                            const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                                            if (match) {
+                                                fileName = match[1].replace(/['"]/g, '');
+                                            }
+                                        } else if (url.includes('securedownload.pl')) {
+                                            // Extract document ID for meaningful filename
+                                            const docIdMatch = url.match(/DokumentID=(\d+)/);
+                                            if (docIdMatch) {
+                                                fileName = `tender_document_${docIdMatch[1]}.pdf`;
+                                            } else {
+                                                fileName = 'tender_document.pdf';
+                                            }
+                                        } else if (url.includes('.pdf')) {
+                                            // Try to get filename from URL
+                                            const urlParts = url.split('/');
+                                            const possibleFile = urlParts[urlParts.length - 1];
+                                            if (possibleFile.includes('.pdf')) {
+                                                fileName = possibleFile.split('?')[0]; // Remove query parameters
+                                            }
+                                        }
+                                        
+                                        if (buffer.length > 1000) { // Only capture files larger than 1KB
+                                            console.log(`Successfully captured PDF: ${fileName} (${buffer.length} bytes)`);
+                                            documents.set(fileName, buffer);
+                                            pdfCaptured = true;
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.log(`Error processing new page response: ${error}`);
+                                }
+                            });
+                            
+                            // Wait for the page to load and PDF to be captured
+                            console.log('Waiting for PDF to load in new tab...');
+                            for (let i = 0; i < 15; i++) { // Wait up to 15 seconds
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                                if (pdfCaptured) {
+                                    console.log('PDF successfully captured from new tab!');
+                                    break;
+                                }
+                                if (i === 14) {
+                                    console.log('PDF capture timeout - trying alternative method...');
+                                    
+                                    // Alternative: try to get the URL and fetch directly
+                                    try {
+                                        const currentUrl = newPage.url();
+                                        console.log(`New page URL: ${currentUrl}`);
+                                        
+                                        if (currentUrl.includes('securedownload') || currentUrl.includes('.pdf')) {
+                                            console.log('Attempting direct fetch of PDF from URL...');
+                                            
+                                            // Try to get the content directly via evaluate
+                                            const pdfBuffer = await newPage.evaluate(async () => {
+                                                try {
+                                                    const response = await fetch(window.location.href);
+                                                    const arrayBuffer = await response.arrayBuffer();
+                                                    return Array.from(new Uint8Array(arrayBuffer));
+                                                } catch (error) {
+                                                    return null;
+                                                }
+                                            });
+                                            
+                                            if (pdfBuffer && pdfBuffer.length > 1000) {
+                                                const buffer = Buffer.from(pdfBuffer);
+                                                const fileName = `tender_document_${Date.now()}.pdf`;
+                                                console.log(`Successfully fetched PDF directly: ${fileName} (${buffer.length} bytes)`);
+                                                documents.set(fileName, buffer);
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.log('Direct fetch failed:', error);
+                                    }
+                                }
+                            }
+                            
+                            try {
+                                await newPage.close();
+                                console.log('New tab closed');
+                            } catch (error) {
+                                console.log('Error closing new page:', error);
+                            }
+                        }
+                        
+                        popupHandled = true;
+                        break;
+                                    }
+                                }
+                                
+                                if (attempt === 9) {
+                                    console.log('No popup detected after 10 seconds, continuing...');
+                                }
+                            }
+                            
+                            // Wait for download to process after popup handling
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                             
                         } catch (error) {
                             console.log(`Failed to download ${doc.text}:`, error);

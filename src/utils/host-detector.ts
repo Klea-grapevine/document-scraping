@@ -1,5 +1,5 @@
 export interface HostInfo {
-    type: 'dtvp' | 'vergabe-niedersachsen' | 'subreport-elvis' | 'evergabe' | 'cosinex' | 'vergabemarktplatz' | 'vergabe24' | 'bund' | 'bieteportal' | 'bieterportal' | 'b2g' | 'vergabekooperation-berlin' | 'general';
+    type: 'dtvp' | 'vergabe-niedersachsen' | 'subreport-elvis' | 'evergabe' | 'cosinex' | 'vergabemarktplatz' | 'vergabe24' | 'bund' | 'bieteportal' | 'bieterportal' | 'b2g' | 'vergabekooperation-berlin' | 'vergabe-metropoleruhr' | 'vergabemarktplatz-brandenburg' | 'vergabeportal-bw' | 'general';
     name: string;
     url: string;
 }
@@ -115,6 +115,33 @@ export function detectHostFromUrl(url: string): HostInfo {
         };
     }
     
+    // Vergabe Metropole Ruhr
+    if (urlLower.includes('vergabe.metropoleruhr.de')) {
+        return {
+            type: 'vergabe-metropoleruhr',
+            name: 'Vergabe Metropole Ruhr',
+            url: url
+        };
+    }
+    
+    // Vergabemarktplatz Brandenburg
+    if (urlLower.includes('vergabemarktplatz.brandenburg.de')) {
+        return {
+            type: 'vergabemarktplatz-brandenburg',
+            name: 'Vergabemarktplatz Brandenburg',
+            url: url
+        };
+    }
+    
+    // Vergabeportal Baden-Württemberg
+    if (urlLower.includes('vergabeportal-bw.de')) {
+        return {
+            type: 'vergabeportal-bw',
+            name: 'Vergabeportal Baden-Württemberg',
+            url: url
+        };
+    }
+    
     // Default to general handler
     return {
         type: 'general',
@@ -149,6 +176,12 @@ export function getHostHandlerName(hostInfo: HostInfo): string {
             return 'handleB2g';
         case 'vergabekooperation-berlin':
             return 'handleVergabekooperationBerlin';
+        case 'vergabe-metropoleruhr':
+            return 'handleVergabeMetropoleruhr';
+        case 'vergabemarktplatz-brandenburg':
+            return 'handleVergabemarktplatzBrandenburg';
+        case 'vergabeportal-bw':
+            return 'handleVergabeportalBw';
         default:
             return 'general';
     }

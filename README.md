@@ -11,6 +11,9 @@ A powerful tool to automatically scrape tender documents from TED.eu notices and
   - Subreport Elvis
   - Evergabe
   - Cosinex
+  - Vergabe Metropole Ruhr
+  - Vergabemarktplatz Brandenburg
+  - Vergabeportal Baden-Württemberg
   - And many more...
 - **Document Processing**: Supports PDF, DOCX, and ZIP files
 - **AI Summarization**: Generates structured summaries with key information
@@ -105,6 +108,9 @@ The system automatically detects and handles these platforms:
 | Subreport Elvis | `subreport-elvis.de` | `handleSubreportElvis` |
 | Evergabe | `evergabe` | `handleEvergabe` |
 | Cosinex | `cosinex` | `handleCosinex` |
+| Vergabe Metropole Ruhr | `vergabe.metropoleruhr.de` | `handleVergabeMetropoleruhr` |
+| Vergabemarktplatz Brandenburg | `vergabemarktplatz.brandenburg.de` | `handleVergabemarktplatzBrandenburg` |
+| Vergabeportal Baden-Württemberg | `vergabeportal-bw.de` | `handleVergabeportalBw` |
 | General | Other URLs | `general` |
 
 ## 📁 Project Structure
@@ -116,6 +122,9 @@ src/
 │   ├── dtvp.ts           # DTVP platform handler
 │   ├── vergabe-niedersachsen.ts
 │   ├── subreport-elvis.ts
+│   ├── vergabe-metropoleruhr.ts
+│   ├── vergabemarktplatz-brandenburg.ts
+│   ├── vergabeportal-bw.ts
 │   └── general.ts        # General document handling
 ├── utils/
 │   ├── document-parsers.ts  # PDF/DOCX parsing

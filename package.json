@@ -1,0 +1,36 @@
+{
+  "name": "document-scraper-summarizer",
+  "version": "1.0.0",
+  "description": "A program to scrape documents from a website and summarize them using AI.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "test:vergabe": "npm run build && node dist/index.js \"https://vergabe.niedersachsen.de/Satellite/public/company/project/CXQ6YYHRB1D/de/documents\"",
+    "test:ted": "npm run build && node dist/index.js \"https://ted.europa.eu/de/notice/-/detail/488905-2025\"",
+    "test:ted-berlin": "npm run build && node dist/index.js \"https://ted.europa.eu/de/notice/-/detail/534802-2025\"",
+    "test:berlin": "npm run build && node dist/index.js \"https://vergabekooperation.berlin/NetServer/TenderingProcedureDetails?function=_Details&TenderOID=54321-Tender-19851afca1f-517308fe22105a7c\"",
+    "test:dtvp": "npm run build && node dist/index.js \"https://www.dtvp.de/Satellite/notice/CXP4YDK5GK4/documents\"",
+    "test:dev": "npx ts-node src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/yauzl": "^2.10.3",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^17.2.1",
+    "mammoth": "^1.10.0",
+    "openai": "^5.12.2",
+    "pdf-parse": "^1.1.1",
+    "puppeteer": "^22.15.0",
+    "xlsx": "^0.18.5",
+    "yauzl": "^3.2.0"
+  }
+}

@@ -10,6 +10,7 @@ A powerful tool to automatically scrape tender documents from TED.eu notices and
   - Vergabe Niedersachsen
   - Subreport Elvis
   - Evergabe
+  - Evergabe Online
   - Cosinex
   - Vergabe Metropole Ruhr
   - Vergabemarktplatz Brandenburg
@@ -107,6 +108,7 @@ The system automatically detects and handles these platforms:
 | Vergabe Niedersachsen | `vergabe.niedersachsen.de` | `handleVergabeNiedersachsen` |
 | Subreport Elvis | `subreport-elvis.de` | `handleSubreportElvis` |
 | Evergabe | `evergabe` | `handleEvergabe` |
+| Evergabe Online | `evergabe-online.de` | `handleEvergabeOnline` |
 | Cosinex | `cosinex` | `handleCosinex` |
 | Vergabe Metropole Ruhr | `vergabe.metropoleruhr.de` | `handleVergabeMetropoleruhr` |
 | Vergabemarktplatz Brandenburg | `vergabemarktplatz.brandenburg.de` | `handleVergabemarktplatzBrandenburg` |
@@ -122,6 +124,7 @@ src/
 │   ├── dtvp.ts           # DTVP platform handler
 │   ├── vergabe-niedersachsen.ts
 │   ├── subreport-elvis.ts
+│   ├── evergabe-online.ts # Evergabe Online platform handler
 │   ├── vergabe-metropoleruhr.ts
 │   ├── vergabemarktplatz-brandenburg.ts
 │   ├── vergabeportal-bw.ts

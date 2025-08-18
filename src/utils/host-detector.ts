@@ -1,5 +1,5 @@
 export interface HostInfo {
-    type: 'dtvp' | 'vergabe-niedersachsen' | 'subreport-elvis' | 'evergabe' | 'cosinex' | 'vergabemarktplatz' | 'vergabe24' | 'bund' | 'bieteportal' | 'bieterportal' | 'b2g' | 'vergabekooperation-berlin' | 'vergabe-metropoleruhr' | 'vergabemarktplatz-brandenburg' | 'vergabeportal-bw' | 'general';
+    type: 'dtvp' | 'vergabe-niedersachsen' | 'subreport-elvis' | 'evergabe' | 'evergabe-online' | 'cosinex' | 'vergabemarktplatz' | 'vergabe24' | 'bund' | 'bieteportal' | 'bieterportal' | 'b2g' | 'vergabekooperation-berlin' | 'vergabe-metropoleruhr' | 'vergabemarktplatz-brandenburg' | 'vergabeportal-bw' | 'general';
     name: string;
     url: string;
 }
@@ -30,6 +30,15 @@ export function detectHostFromUrl(url: string): HostInfo {
         return {
             type: 'subreport-elvis',
             name: 'Subreport Elvis',
+            url: url
+        };
+    }
+    
+    // Evergabe Online
+    if (urlLower.includes('evergabe-online.de')) {
+        return {
+            type: 'evergabe-online',
+            name: 'Evergabe Online',
             url: url
         };
     }
@@ -158,6 +167,8 @@ export function getHostHandlerName(hostInfo: HostInfo): string {
             return 'handleVergabeNiedersachsen';
         case 'subreport-elvis':
             return 'handleSubreportElvis';
+        case 'evergabe-online':
+            return 'handleEvergabeOnline';
         case 'evergabe':
             return 'handleEvergabe';
         case 'cosinex':

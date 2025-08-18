@@ -92,7 +92,7 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                 }
                 
                 const browser = await puppeteer.launch({ 
-                    headless: false, 
+                    headless: true, 
                     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-features=VizDisplayCompositor'] 
                 });
                 try {

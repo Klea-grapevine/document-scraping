@@ -1,5 +1,7 @@
 import puppeteer from 'puppeteer';
 
+
+
 export async function handleSubreportElvis(page: any, url: string): Promise<Map<string, Buffer>> {
     const documents = new Map<string, Buffer>();
     
@@ -35,109 +37,30 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
             console.log('Content did not load within expected time, proceeding anyway...');
         }
         
-        // Debug: Let's see what interactive elements are available
-        const allInteractiveElements = await page.$$eval('button, input[type="button"], a', (elements: Element[]) => {
-            return elements.map((el: Element) => ({
-                text: (el.textContent || el.getAttribute('value') || '').trim(),
-                tagName: el.tagName.toLowerCase(),
-                className: el.className,
-                id: el.id
-            }));
-        });
-        console.log('Found interactive elements:', allInteractiveElements);
+
         
-        // Debug: Log all text content to see what's available
-        const pageTextContent = await page.evaluate(() => {
-            return document.body.textContent;
-        });
-        console.log('Page text content sample:', pageTextContent?.substring(0, 1000));
-        
-        // Look for all unique button/clickable text to understand what's available
-        const allClickableTexts = await page.evaluate(() => {
+        // Step 1: Find the display button
+        const displayButton = await page.evaluate(() => {
             const elements = Array.from(document.querySelectorAll('button, input[type="button"], a, span, div'));
-            const texts = new Set<string>();
-            elements.forEach(el => {
-                const text = (el.textContent || el.getAttribute('value') || '').trim();
-                if (text && text.length > 0 && text.length < 100) {
-                    texts.add(text);
-                }
-            });
-            return Array.from(texts).sort();
-        });
-        console.log('All available clickable texts:', allClickableTexts);
-        
-        // Debug: Look for clickable elements containing "anzeigen" text
-        const displayRelatedElements = await page.evaluate(() => {
-            const clickableElements = Array.from(document.querySelectorAll('button, input[type="button"], a, span, div'));
-            const results: Array<{tagName: string, text: string, className: string, id: string, index: number}> = [];
-            
-            for (let i = 0; i < clickableElements.length; i++) {
-                const el = clickableElements[i];
+            for (let i = 0; i < elements.length; i++) {
+                const el = elements[i];
                 const text = (el.textContent || el.getAttribute('value') || '').toLowerCase().trim();
-                if (text.includes('anzeigen') || text.includes('display')) {
-                    results.push({
-                        tagName: el.tagName.toLowerCase(),
-                        text: (el.textContent || el.getAttribute('value') || '').trim().substring(0, 100),
-                        className: el.className || '',
-                        id: el.id || '',
-                        index: i
-                    });
+                const title = el.getAttribute('title') || '';
+                
+                // Look for German display button patterns first, then English
+                if (text === 'anzeigen' || 
+                    text === 'display' ||
+                    text.includes('anzeigen ohne') || 
+                    text.includes('ohne anmeldung') ||
+                    text.includes('display without') ||
+                    title.toLowerCase().includes('anzeigen') ||
+                    title.toLowerCase().includes('display') ||
+                    (text.includes('anzeigen') && text.length < 30)) { // Allow longer anzeigen text
+                    return { index: i, text: text, found: true, tagName: el.tagName };
                 }
             }
-            return results;
+            return { found: false };
         });
-        console.log('Clickable elements containing display/anzeigen:', displayRelatedElements);
-        
-        // Step 1: Use the debug info to find the display button
-        let displayButton: any = { found: false };
-        if (displayRelatedElements.length > 0) {
-            // Prioritize actual buttons over divs - look for button with "anzeigen" text
-            const actualButton = displayRelatedElements.find((el: any) => 
-                el.tagName === 'button' && el.text.toLowerCase().trim() === 'anzeigen'
-            );
-            
-            if (actualButton) {
-                displayButton = {
-                    index: actualButton.index,
-                    text: actualButton.text,
-                    found: true,
-                    tagName: actualButton.tagName
-                };
-                console.log('Using actual anzeigen button:', displayButton);
-            } else {
-                // Fallback to first element that contains "anzeigen"
-                displayButton = {
-                    index: displayRelatedElements[0].index,
-                    text: displayRelatedElements[0].text,
-                    found: true,
-                    tagName: displayRelatedElements[0].tagName
-                };
-                console.log('Using first display-related element:', displayButton);
-            }
-        } else {
-            // Fallback to original detection
-            displayButton = await page.evaluate(() => {
-                const elements = Array.from(document.querySelectorAll('button, input[type="button"], a, span, div'));
-                for (let i = 0; i < elements.length; i++) {
-                    const el = elements[i];
-                    const text = (el.textContent || el.getAttribute('value') || '').toLowerCase().trim();
-                    const title = el.getAttribute('title') || '';
-                    
-                    // Look for German display button patterns first, then English
-                    if (text === 'anzeigen' || 
-                        text === 'display' ||
-                        text.includes('anzeigen ohne') || 
-                        text.includes('ohne anmeldung') ||
-                        text.includes('display without') ||
-                        title.toLowerCase().includes('anzeigen') ||
-                        title.toLowerCase().includes('display') ||
-                        (text.includes('anzeigen') && text.length < 30)) { // Allow longer anzeigen text
-                        return { index: i, text: text, found: true, tagName: el.tagName };
-                    }
-                }
-                return { found: false };
-            });
-        }
         
         console.log('Looking for display button:', displayButton);
 
@@ -200,8 +123,6 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                             const contentType = headers['content-type'] || '';
                             const contentDisposition = headers['content-disposition'] || '';
                             
-                            console.log(`Response: ${url} | Content-Type: ${contentType} | Content-Disposition: ${contentDisposition}`);
-                            
                             // Check if this is a file download - be more liberal with detection
                             if (contentDisposition.includes('attachment') || 
                                 contentType.includes('application/pdf') ||
@@ -211,10 +132,6 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                                 url.includes('securedownload') ||
                                 url.includes('.pdf') ||
                                 url.includes('download')) {
-                                
-                                console.log(`Attempting to capture download: ${url}`);
-                                const buffer = await response.buffer();
-                                console.log(`Buffer size: ${buffer.length} bytes`);
                                 
                                 // Extract filename from content-disposition or URL
                                 let fileName = 'download.pdf';
@@ -248,16 +165,22 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                                 // Only skip obviously platform documents, be more inclusive
                                 if (!fileName.toLowerCase().includes('agb') && 
                                     !fileName.toLowerCase().includes('datenschutz') &&
-                                    !fileName.toLowerCase().includes('impressum') &&
-                                    buffer.length > 1000) { // Only include files larger than 1KB
-                                    console.log(`Successfully captured: ${fileName} (${buffer.length} bytes, Content-Type: ${contentType})`);
-                                    documents.set(fileName, buffer);
-                                } else {
-                                    console.log(`Skipped document: ${fileName} (${buffer.length} bytes)`);
+                                    !fileName.toLowerCase().includes('impressum')) {
+                                    
+                                    try {
+                                        const buffer = await response.buffer();
+                                        if (buffer.length > 1000) { // Only include files larger than 1KB
+                                            console.log(`Successfully captured: ${fileName} (${buffer.length} bytes)`);
+                                            documents.set(fileName, buffer);
+                                        }
+                                    } catch (bufferError: any) {
+                                        // Skip if we can't get the buffer (common with preflight requests)
+                                        console.log(`Skipped response buffer capture for ${fileName}: ${bufferError.message || 'Unknown error'}`);
+                                    }
                                 }
                             }
                         } catch (error) {
-                            console.log(`Error processing response: ${error}`);
+                            // Skip response processing errors silently
                         }
                     });
                     
@@ -341,211 +264,611 @@ export async function handleSubreportElvis(page: any, url: string): Promise<Map<
                             console.log('Waiting for download popup to appear...');
                             let popupHandled = false;
                             
-                            for (let attempt = 0; attempt < 10 && !popupHandled; attempt++) {
+                                                        for (let attempt = 0; attempt < 15 && !popupHandled; attempt++) {
                                 await new Promise(resolve => setTimeout(resolve, 1000));
                                 
-                                // Look for popup with download, login, and registrirung buttons
-                                const popupButtons = await page.evaluate(() => {
-                                    // Look for modal or popup elements
-                                    const modals = Array.from(document.querySelectorAll('.modal, .popup, .dialog, [role="dialog"], .overlay, .ui-dialog'));
-                                    const allButtons = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div'));
+                                // Enhanced popup detection
+                                const popupInfo = await page.evaluate(() => {
                                     
-                                    // Get buttons from modal if found, otherwise check all visible buttons
-                                    let buttonsToCheck = allButtons;
-                                    if (modals.length > 0) {
-                                        const modal = modals[0];
-                                        const modalButtons = Array.from(modal.querySelectorAll('button, a, input[type="button"], span, div'));
-                                        if (modalButtons.length > 0) {
-                                            buttonsToCheck = modalButtons;
+                                    // Look for elements that contain download-related text
+                                    const visibleElements = Array.from(document.querySelectorAll('*')).filter(el => {
+                                        const style = getComputedStyle(el);
+                                        return style.display !== 'none' && style.visibility !== 'hidden';
+                                    });
+                                    
+                                    const downloadElements = visibleElements.filter(el => {
+                                        const text = (el.textContent || '').toLowerCase();
+                                        return text.includes('download') || text.includes('herunterladen') || 
+                                               text.includes('login') || text.includes('anmelden') ||
+                                               text.includes('registr') || text.includes('ohne');
+                                    });
+                                    
+                                    // Look for various popup/modal/overlay containers with extensive selectors
+                                    const popupSelectors = [
+                                        '.modal', '.popup', '.dialog', '[role="dialog"]', '.overlay', '.ui-dialog',
+                                        '.MuiDialog-root', '.ant-modal', '.modal-dialog', '.popup-content',
+                                        '.lightbox', '.fancybox', '.colorbox', '.thickbox', '.nyromodal',
+                                        'div[style*="position: fixed"]', 'div[style*="z-index"]',
+                                        'div[style*="position: absolute"]', '[aria-modal="true"]',
+                                        '.ui-widget-overlay', '.ui-front', '.modal-backdrop',
+                                        // Add more specific selectors for the subreport popup
+                                        'div[class*="popup"]', 'div[class*="modal"]', 'div[class*="dialog"]',
+                                        'div[class*="overlay"]', 'div[class*="lightbox"]',
+                                        // Specific selector for the subreport popup
+                                        '#x-auto-6'
+                                    ];
+                                    
+                                    let popup = null;
+                                    let popupSelector = '';
+                                    
+                                    // First, try to find the specific popup by ID
+                                    const specificPopup = document.getElementById('x-auto-6');
+                                    if (specificPopup) {
+                                        const style = getComputedStyle(specificPopup);
+                                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                                            console.log('Found specific popup with ID x-auto-6');
+                                            popup = specificPopup;
+                                            popupSelector = '#x-auto-6';
                                         }
                                     }
                                     
-                                    const results: Array<{text: string, index: number, isDownload: boolean}> = [];
+                                    // If specific popup not found, try other selectors
+                                    if (!popup) {
+                                        for (const selector of popupSelectors) {
+                                            const elements = document.querySelectorAll(selector);
+                                            for (const element of elements) {
+                                                const style = getComputedStyle(element);
+                                                if (style.display !== 'none' && style.visibility !== 'hidden') {
+                                                    popup = element;
+                                                    popupSelector = selector;
+                                                    break;
+                                                }
+                                            }
+                                            if (popup) break;
+                                        }
+                                    }
                                     
-                                    for (let i = 0; i < buttonsToCheck.length; i++) {
-                                        const btn = buttonsToCheck[i];
-                                        const text = (btn.textContent || btn.getAttribute('value') || '').toLowerCase().trim();
+                                    // Enhanced fallback: look for any element that appeared with high z-index or overlay properties
+                                    if (!popup) {
+                                        console.log('No standard popup found, checking for custom overlays...');
+                                        const allDivs = Array.from(document.querySelectorAll('div, section, aside, article'));
                                         
-                                        // Look for download, login, or registrirung buttons
-                                        if (text === 'download' || text === 'herunterladen' || 
-                                            text === 'login' || text === 'anmelden' ||
-                                            text === 'registrirung' || text === 'registrierung') {
+                                        for (const div of allDivs) {
+                                            const style = getComputedStyle(div);
+                                            const zIndex = parseInt(style.zIndex) || 0;
                                             
-                                            // Find the global index of this button
-                                            const globalIndex = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div')).indexOf(btn);
+                                            // Check for overlay-like properties
+                                            if ((style.position === 'fixed' || style.position === 'absolute') && 
+                                                (zIndex > 100 || style.zIndex === 'auto') &&
+                                                style.display !== 'none' && style.visibility !== 'hidden') {
+                                                
+                                                const text = (div.textContent || '').toLowerCase();
+                                                console.log(`Checking overlay candidate: z-index=${zIndex}, position=${style.position}, text="${text.substring(0, 100)}"`);
+                                                
+                                                // Look for the specific popup content from the image description
+                                                if (text.includes('hinweis') || text.includes('achtung') ||
+                                                    text.includes('download') || text.includes('herunterladen') ||
+                                                    text.includes('login') || text.includes('anmelden') ||
+                                                    text.includes('registr') || text.includes('ohne') ||
+                                                    text.includes('anmeldung') || text.includes('registration') ||
+                                                    (zIndex > 999 && text.length > 10)) { // High z-index with content
+                                                
+                                                    console.log('Found custom popup/overlay!');
+                                                    popup = div;
+                                                    popupSelector = 'custom-overlay';
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    const results = [];
+                                    
+                                    if (popup) {
+                                        // Look for clickable elements within the popup
+                                        const clickableElements = Array.from(popup.querySelectorAll('button, a, input[type="button"], span, div, td, th'));
+                                        
+                                        // Enhanced detection: Look specifically for the orange download button with icon
+                                        const orangeDownloadButtons = Array.from(popup.querySelectorAll('button, a, input[type="button"]')).filter(btn => {
+                                            const style = getComputedStyle(btn);
+                                            const text = (btn.textContent || '').toLowerCase().trim();
+                                            
+                                            // Check for orange background (common CSS patterns)
+                                            const backgroundColor = style.backgroundColor || '';
+                                            const color = style.color || '';
+                                            const className = btn.className || '';
+                                            
+                                            return (text === 'download' || text === 'herunterladen') &&
+                                                   (backgroundColor.includes('orange') || 
+                                                    backgroundColor.includes('rgb(255, 165, 0)') ||
+                                                    backgroundColor.includes('rgb(255, 140, 0)') ||
+                                                    className.includes('orange') ||
+                                                    className.includes('download') ||
+                                                    className.includes('btn-primary') ||
+                                                    className.includes('btn-download'));
+                                        });
+                                        
+                                        for (let i = 0; i < clickableElements.length; i++) {
+                                            const btn = clickableElements[i];
+                                            const text = (btn.textContent || btn.getAttribute('value') || '').toLowerCase().trim();
+                                            const href = btn.getAttribute('href');
+                                            const onclick = btn.getAttribute('onclick');
+                                            const style = getComputedStyle(btn);
+                                            const backgroundColor = style.backgroundColor || '';
+                                            const className = btn.className || '';
+                                            
+                                            // Check if this is an orange download button (based on the image description)
+                                            const isOrangeButton = (text === 'download' || text === 'herunterladen') &&
+                                                (backgroundColor.includes('orange') || 
+                                                 backgroundColor.includes('rgb(255, 165, 0)') ||
+                                                 backgroundColor.includes('rgb(255, 140, 0)') ||
+                                                 backgroundColor.includes('rgb(255, 69, 0)') ||
+                                                 backgroundColor.includes('rgb(255, 99, 71)') ||
+                                                 className.includes('orange') ||
+                                                 className.includes('download') ||
+                                                 className.includes('btn-primary') ||
+                                                 className.includes('btn-download') ||
+                                                 className.includes('btn-orange'));
+                                            
+                                            // Also check for buttons with download icons (white downward arrow)
+                                            const hasDownloadIcon = btn.querySelector('i, span, img') && 
+                                                (btn.innerHTML.includes('arrow') || 
+                                                 btn.innerHTML.includes('download') ||
+                                                 btn.innerHTML.includes('↓') ||
+                                                 btn.innerHTML.includes('&#8595;'));
+                                            
+                                            // Look for download buttons with broader matching - prioritize exact "Download" button
+                                            if (text === 'download' || text === 'herunterladen' || 
+                                                text.includes('ohne anmeldung') || text.includes('without registration') ||
+                                                text.includes('download') || text.includes('herunterladen') ||
+                                                href?.includes('download') || onclick?.includes('download')) {
+                                                
+                                                results.push({
+                                                    text: text,
+                                                    tagName: btn.tagName,
+                                                    href: href,
+                                                    onclick: onclick,
+                                                    className: btn.className,
+                                                    id: btn.id,
+                                                    isDownload: true,
+                                                    isOrangeButton: isOrangeButton,
+                                                    hasDownloadIcon: hasDownloadIcon,
+                                                    globalIndex: Array.from(document.querySelectorAll('*')).indexOf(btn)
+                                                });
+                                            }
+                                        }
+                                    } else {
+                                        console.log('=== NO POPUP FOUND ===');
+                                        
+                                        // Final fallback: look for ANY download buttons that appeared recently
+                                        console.log('Checking all page elements for download buttons...');
+                                        const allButtons = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div'));
+                                        let foundButtons = 0;
+                                        
+                                        for (const btn of allButtons) {
+                                            const text = (btn.textContent || btn.getAttribute('value') || '').toLowerCase().trim();
+                                            const style = getComputedStyle(btn);
+                                            const href = btn.getAttribute('href');
+                                            const onclick = btn.getAttribute('onclick');
+                                            
+                                            if ((text.includes('download') || text.includes('herunterladen') || 
+                                                text.includes('ohne anmeldung') || text.includes('without registration') ||
+                                                href?.includes('download') || onclick?.includes('download')) &&
+                                                style.display !== 'none' && style.visibility !== 'hidden') {
+                                                
+                                                foundButtons++;
+                                                console.log(`Found standalone download button: "${text}" (${btn.tagName})`);
                                             
                                             results.push({
                                                 text: text,
-                                                index: globalIndex,
-                                                isDownload: text === 'download' || text === 'herunterladen'
-                                            });
+                                                    tagName: btn.tagName,
+                                                    href: href,
+                                                    onclick: onclick,
+                                                    className: btn.className,
+                                                    id: btn.id,
+                                                    isDownload: true,
+                                                    globalIndex: Array.from(document.querySelectorAll('*')).indexOf(btn)
+                                                });
+                                            }
                                         }
+                                        
+                                        console.log(`Found ${foundButtons} standalone download buttons`);
                                     }
                                     
+                                    console.log(`=== DETECTION RESULT: ${results.length} download options found ===`);
                                     return results;
                                 });
                                 
-                                if (popupButtons.length > 0) {
-                                    console.log('Found popup buttons:', popupButtons);
+                                if (popupInfo.length > 0) {
                                     
-                                    // Find the download button in the popup
-                                    const downloadButton = popupButtons.find((btn: {text: string, index: number, isDownload: boolean}) => btn.isDownload);
+                                    // Find the best download button - prioritize orange download buttons with icons first
+                                    let downloadButton = popupInfo.find((btn: any) => 
+                                        btn.isOrangeButton === true && btn.hasDownloadIcon === true
+                                    );
+                                    
+                                    // Fallback to any orange download button
+                                    if (!downloadButton) {
+                                        downloadButton = popupInfo.find((btn: any) => 
+                                            btn.isOrangeButton === true
+                                        );
+                                    }
+                                    
+                                    // Fallback to buttons with download icons
+                                    if (!downloadButton) {
+                                        downloadButton = popupInfo.find((btn: any) => 
+                                            btn.hasDownloadIcon === true
+                                        );
+                                    }
+                                    
+                                    // Fallback to exact download text
+                                    if (!downloadButton) {
+                                        downloadButton = popupInfo.find((btn: any) => 
+                                            btn.text === 'download' || btn.text === 'herunterladen'
+                                        );
+                                    }
+                                    
+                                    // Fallback to buttons with download-related text
+                                    if (!downloadButton) {
+                                        downloadButton = popupInfo.find((btn: any) => 
+                                            btn.text.includes('ohne anmeldung') || btn.text.includes('without registration') ||
+                                            btn.text.includes('download') || btn.text.includes('herunterladen') ||
+                                            btn.href?.includes('download') || btn.onclick?.includes('download')
+                                        );
+                                    }
                                     
                                     if (downloadButton) {
-                                        console.log(`Clicking popup download button: "${downloadButton.text}"`);
+                                        console.log(`Clicking download button: "${downloadButton.text}"`);
                                         
-                                                                // Set up listener for new tabs/windows that might open for downloads
-                        const newPagePromise = new Promise<any>((resolve) => {
-                            page.browser().on('targetcreated', async (target: any) => {
-                                if (target.type() === 'page') {
-                                    const newPage = await target.page();
-                                    if (newPage) {
-                                        console.log('New page/tab detected for download');
-                                        resolve(newPage);
-                                    }
-                                }
-                            });
-                            
-                            // Timeout after 10 seconds if no new page opens
-                            setTimeout(() => resolve(null), 10000);
-                        });
-                        
-                        await page.evaluate((buttonIndex: number) => {
-                            const buttons = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div'));
-                            const btn = buttons[buttonIndex] as HTMLElement;
-                            if (btn) {
-                                btn.click();
-                                return true;
-                            }
-                            return false;
-                        }, downloadButton.index);
-                        
-                        console.log('Popup download button clicked successfully');
-                        
-                        // Wait to see if a new page opens for the download
-                        const newPage = await newPagePromise;
-                        if (newPage) {
-                            console.log('New page/tab opened - monitoring for PDF content...');
-                            
-                            let pdfCaptured = false;
-                            
-                            // Set up response listener for the new page to capture PDF content
-                            newPage.on('response', async (response: any) => {
-                                try {
-                                    const url = response.url();
-                                    const headers = response.headers();
-                                    const contentType = headers['content-type'] || '';
-                                    const contentDisposition = headers['content-disposition'] || '';
-                                    
-                                    console.log(`New page response: ${url} | Content-Type: ${contentType}`);
-                                    
-                                    // Check if this is a PDF or document file
-                                    if (contentType.includes('application/pdf') ||
-                                        contentType.includes('application/msword') ||
-                                        contentType.includes('application/zip') ||
-                                        contentType.includes('application/octet-stream') ||
-                                        url.includes('securedownload') ||
-                                        url.includes('.pdf') ||
-                                        url.includes('download')) {
-                                        
-                                        console.log(`Capturing PDF content from new page: ${url}`);
-                                        const buffer = await response.buffer();
-                                        console.log(`PDF file size: ${buffer.length} bytes`);
-                                        
-                                        let fileName = 'tender_document.pdf';
-                                        
-                                        // Try to extract filename from content-disposition
-                                        if (contentDisposition && contentDisposition.includes('filename')) {
-                                            const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                                            if (match) {
-                                                fileName = match[1].replace(/['"]/g, '');
-                                            }
-                                        } else if (url.includes('securedownload.pl')) {
-                                            // Extract document ID for meaningful filename
-                                            const docIdMatch = url.match(/DokumentID=(\d+)/);
-                                            if (docIdMatch) {
-                                                fileName = `tender_document_${docIdMatch[1]}.pdf`;
-                                            } else {
-                                                fileName = 'tender_document.pdf';
-                                            }
-                                        } else if (url.includes('.pdf')) {
-                                            // Try to get filename from URL
-                                            const urlParts = url.split('/');
-                                            const possibleFile = urlParts[urlParts.length - 1];
-                                            if (possibleFile.includes('.pdf')) {
-                                                fileName = possibleFile.split('?')[0]; // Remove query parameters
-                                            }
-                                        }
-                                        
-                                        if (buffer.length > 1000) { // Only capture files larger than 1KB
-                                            console.log(`Successfully captured PDF: ${fileName} (${buffer.length} bytes)`);
-                                            documents.set(fileName, buffer);
-                                            pdfCaptured = true;
-                                        }
-                                    }
-                                } catch (error) {
-                                    console.log(`Error processing new page response: ${error}`);
-                                }
-                            });
-                            
-                            // Wait for the page to load and PDF to be captured
-                            console.log('Waiting for PDF to load in new tab...');
-                            for (let i = 0; i < 15; i++) { // Wait up to 15 seconds
-                                await new Promise(resolve => setTimeout(resolve, 1000));
-                                if (pdfCaptured) {
-                                    console.log('PDF successfully captured from new tab!');
-                                    break;
-                                }
-                                if (i === 14) {
-                                    console.log('PDF capture timeout - trying alternative method...');
-                                    
-                                    // Alternative: try to get the URL and fetch directly
-                                    try {
-                                        const currentUrl = newPage.url();
-                                        console.log(`New page URL: ${currentUrl}`);
-                                        
-                                        if (currentUrl.includes('securedownload') || currentUrl.includes('.pdf')) {
-                                            console.log('Attempting direct fetch of PDF from URL...');
-                                            
-                                            // Try to get the content directly via evaluate
-                                            const pdfBuffer = await newPage.evaluate(async () => {
-                                                try {
-                                                    const response = await fetch(window.location.href);
-                                                    const arrayBuffer = await response.arrayBuffer();
-                                                    return Array.from(new Uint8Array(arrayBuffer));
-                                                } catch (error) {
-                                                    return null;
+                                        // Enhanced click logic with multiple fallback methods
+                                        const clickSuccess = await page.evaluate((buttonInfo: any) => {
+                                            try {
+                                                // Method 1: Try to find by global index first
+                                                const allElements = Array.from(document.querySelectorAll('*'));
+                                                let targetButton = allElements[buttonInfo.globalIndex];
+                                                
+                                                if (!targetButton) {
+                                                    
+                                                    // Method 2: Find by exact text and tag name
+                                                    const exactMatch = Array.from(document.querySelectorAll('button, a, input[type="button"], span, div')).find((btn: any) => {
+                                                        const text = (btn.textContent || btn.getAttribute('value') || '').toLowerCase().trim();
+                                                        return text === buttonInfo.text.toLowerCase() && btn.tagName === buttonInfo.tagName;
+                                                    });
+                                                    
+                                                    if (exactMatch) {
+                                                        targetButton = exactMatch;
+                                                    } else {
+                                                        // Method 3: Find by class name (for GWT buttons)
+                                                        if (buttonInfo.className) {
+                                                            const classMatch = document.querySelector(`.${buttonInfo.className.split(' ')[0]}`);
+                                                            if (classMatch) {
+                                                                targetButton = classMatch;
+                                                            }
+                                                        }
+                                                        
+                                                        // Method 4: Find any button with download text
+                                                        if (!targetButton) {
+                                                            const downloadButtons = Array.from(document.querySelectorAll('button, a, input[type="button"]')).filter((btn: any) => {
+                                                                const text = (btn.textContent || '').toLowerCase().trim();
+                                                                return text === 'download' || text === 'herunterladen';
+                                                            });
+                                                            
+                                                            if (downloadButtons.length > 0) {
+                                                                targetButton = downloadButtons[0];
+                                                            }
+                                                        }
+                                                        
+                                                        // Method 5: Specific handling for GWT buttons (common in subreport)
+                                                        if (!targetButton) {
+                                                            const gwtButtons = Array.from(document.querySelectorAll('button.gwt-Button, div.gwt-Button')).filter((btn: any) => {
+                                                                const text = (btn.textContent || '').toLowerCase().trim();
+                                                                return text === 'download' || text === 'herunterladen';
+                                                            });
+                                                            
+                                                            if (gwtButtons.length > 0) {
+                                                                targetButton = gwtButtons[0];
+                                                                console.log('Found GWT download button:', targetButton);
+                                                            }
+                                                        }
+                                                        
+                                                        // Method 6: Target the specific popup structure from the HTML
+                                                        if (!targetButton) {
+                                                            // Look for the popup with ID x-auto-6
+                                                            const popup = document.getElementById('x-auto-6');
+                                                            if (popup) {
+                                                                console.log('Found popup with ID x-auto-6');
+                                                                
+                                                                // Look for the download button with specific classes and positioning
+                                                                const downloadBtn = popup.querySelector('button.gwt-Button[style*="left: 185px"]');
+                                                                if (downloadBtn) {
+                                                                    targetButton = downloadBtn;
+                                                                    console.log('Found download button by specific positioning:', targetButton);
+                                                                } else {
+                                                                    // Fallback: look for button containing "Download" text in the popup
+                                                                    const buttons = popup.querySelectorAll('button.gwt-Button');
+                                                                    for (const btn of buttons) {
+                                                                        const text = (btn.textContent || '').toLowerCase().trim();
+                                                                        if (text === 'download') {
+                                                                            targetButton = btn;
+                                                                            console.log('Found download button by text in popup:', targetButton);
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // Method 7: Look for download buttons inside containers (common in popups)
+                                                        if (!targetButton) {
+                                                            const containers = Array.from(document.querySelectorAll('div, span, td')).filter((container: any) => {
+                                                                const text = (container.textContent || '').toLowerCase();
+                                                                return text.includes('download') && text.includes('login') && text.includes('registrierung');
+                                                            });
+                                                            
+                                                            for (const container of containers) {
+                                                                const downloadBtn = container.querySelector('button, a, input[type="button"]');
+                                                                if (downloadBtn) {
+                                                                    const text = (downloadBtn.textContent || '').toLowerCase().trim();
+                                                                    if (text === 'download' || text === 'herunterladen') {
+                                                                        targetButton = downloadBtn;
+                                                                        console.log('Found download button inside container:', targetButton);
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // Method 8: Direct targeting using the exact HTML structure
+                                                        if (!targetButton) {
+                                                            // Try to find the button by the exact structure from the HTML
+                                                            const exactButton = document.querySelector('button.gwt-Button.GIVH1UACAK.GIVH1UACKK[style*="left: 185px"]');
+                                                            if (exactButton) {
+                                                                targetButton = exactButton;
+                                                                console.log('Found exact download button by CSS selector:', targetButton);
+                                                            } else {
+                                                                // Try finding by the specific class combination
+                                                                const buttons = document.querySelectorAll('button.gwt-Button.GIVH1UACAK.GIVH1UACKK');
+                                                                for (const btn of buttons) {
+                                                                    const text = (btn.textContent || '').toLowerCase().trim();
+                                                                    if (text === 'download') {
+                                                                        targetButton = btn;
+                                                                        console.log('Found download button by class combination:', targetButton);
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
-                                            });
+                                                
+                                                if (targetButton) {
+                                                    console.log('Target button found, attempting to click...');
+                                                    
+                                                    // Try multiple click methods
+                                                    let clickSuccess = false;
+                                                    
+                                                    // Method 1: Direct click
+                                                    try {
+                                                        if (typeof (targetButton as any).click === 'function') {
+                                                            (targetButton as HTMLElement).click();
+                                                            console.log('Direct click performed successfully');
+                                                            clickSuccess = true;
+                                                        }
+                                                    } catch (e) {
+                                                        console.log('Direct click failed:', e);
+                                                    }
+                                                    
+                                                    // Method 2: Dispatch click event if direct click didn't work
+                                                    if (!clickSuccess) {
+                                                        try {
+                                                            const clickEvent = new MouseEvent('click', {
+                                                                view: window,
+                                                                bubbles: true,
+                                                                cancelable: true
+                                                            });
+                                                            targetButton.dispatchEvent(clickEvent);
+                                                            console.log('Click event dispatched successfully');
+                                                            clickSuccess = true;
+                                                        } catch (e) {
+                                                            console.log('Click event dispatch failed:', e);
+                                                        }
+                                                    }
+                                                    
+                                                    // Method 3: Try mousedown + mouseup events
+                                                    if (!clickSuccess) {
+                                                        try {
+                                                            const mouseDownEvent = new MouseEvent('mousedown', {
+                                                                view: window,
+                                                                bubbles: true,
+                                                                cancelable: true
+                                                            });
+                                                            const mouseUpEvent = new MouseEvent('mouseup', {
+                                                                view: window,
+                                                                bubbles: true,
+                                                                cancelable: true
+                                                            });
+                                                            targetButton.dispatchEvent(mouseDownEvent);
+                                                            targetButton.dispatchEvent(mouseUpEvent);
+                                                            console.log('Mouse events dispatched successfully');
+                                                            clickSuccess = true;
+                                                        } catch (e) {
+                                                            console.log('Mouse events failed:', e);
+                                                        }
+                                                    }
+                                                    
+                                                    // Method 4: If it's a link with href, handle navigation
+                                                    if (!clickSuccess && targetButton.tagName === 'A' && buttonInfo.href) {
+                                                        console.log('Opening link in new tab:', buttonInfo.href);
+                                                        if (buttonInfo.href !== '#' && buttonInfo.href !== 'javascript:void(0)') {
+                                                            window.open(buttonInfo.href, '_blank');
+                                                            clickSuccess = true;
+                                                        }
+                                                    }
+                                                    
+                                                    // Method 5: If it has onclick, try to execute it
+                                                    if (!clickSuccess && buttonInfo.onclick) {
+                                                        try {
+                                                            console.log('Executing onclick:', buttonInfo.onclick);
+                                                            eval(buttonInfo.onclick);
+                                                            clickSuccess = true;
+                                                        } catch (e) {
+                                                            console.log('Onclick execution failed:', e);
+                                                        }
+                                                    }
+                                                    
+                                                    return clickSuccess;
+                                                } else {
+                                                    console.log('No target button found with any method');
+                                                    return false;
+                                                }
+                                            } catch (error) {
+                                                console.log('Error in click logic:', error);
+                                                return false;
+                                            }
+                                        }, downloadButton);
+                        
+                                        if (clickSuccess) {
+                                            console.log('Popup download button clicked successfully');
                                             
-                                            if (pdfBuffer && pdfBuffer.length > 1000) {
-                                                const buffer = Buffer.from(pdfBuffer);
-                                                const fileName = `tender_document_${Date.now()}.pdf`;
-                                                console.log(`Successfully fetched PDF directly: ${fileName} (${buffer.length} bytes)`);
-                                                documents.set(fileName, buffer);
+                                            // Wait a bit for the download to process
+                                            await new Promise(resolve => setTimeout(resolve, 3000));
+                                            
+                                            popupHandled = true;
+                                            break;
+                                        } else {
+                                            console.log('Failed to click popup button, trying next attempt...');
+                                            
+                                            // Additional retry: try clicking with a small delay
+                                            if (attempt < 3) {
+                                                console.log('Attempting retry with delay...');
+                                                await new Promise(resolve => setTimeout(resolve, 1000));
+                                                
+                                                // Try clicking again with a different approach
+                                                const retryClick = await page.evaluate(() => {
+                                                    const downloadButtons = Array.from(document.querySelectorAll('button, a, input[type="button"]')).filter((btn: any) => {
+                                                        const text = (btn.textContent || '').toLowerCase().trim();
+                                                        return text === 'download' || text === 'herunterladen';
+                                                    });
+                                                    
+                                                    if (downloadButtons.length > 0) {
+                                                        const btn = downloadButtons[0];
+                                                        try {
+                                                            (btn as HTMLElement).click();
+                                                            return true;
+                                                        } catch (e) {
+                                                            return false;
+                                                        }
+                                                    }
+                                                    return false;
+                                                });
+                                                
+                                                if (retryClick) {
+                                                    console.log('Retry click successful');
+                                                    await new Promise(resolve => setTimeout(resolve, 3000));
+                                                    popupHandled = true;
+                                                    break;
+                                                }
                                             }
                                         }
-                                    } catch (error) {
-                                        console.log('Direct fetch failed:', error);
+                                    } else {
+                                        console.log('No suitable download button found in popup options');
                                     }
-                                }
-                            }
-                            
-                            try {
-                                await newPage.close();
-                                console.log('New tab closed');
-                            } catch (error) {
-                                console.log('Error closing new page:', error);
-                            }
-                        }
-                        
-                        popupHandled = true;
-                        break;
+                                } else {
+                                    console.log(`No popup download options found on attempt ${attempt + 1}`);
+                                    
+                                    // Additional debugging: check what's actually on the page
+                                    if (attempt < 3) {
+                                        const pageContent = await page.evaluate(() => {
+                                            const allText = document.body.textContent || '';
+                                            const hasNewContent = allText.includes('download') || allText.includes('herunterladen') || 
+                                                                allText.includes('login') || allText.includes('anmelden') ||
+                                                                allText.includes('ohne') || allText.includes('registr');
+                                            
+                                            // Count visible clickable elements
+                                            const clickables = Array.from(document.querySelectorAll('button, a, input[type="button"]'))
+                                                .filter(el => {
+                                                    const style = getComputedStyle(el);
+                                                    return style.display !== 'none' && style.visibility !== 'hidden';
+                                                });
+                                            
+                                            return {
+                                                hasDownloadText: hasNewContent,
+                                                clickableCount: clickables.length,
+                                                bodyTextLength: allText.length,
+                                                sampleText: allText.substring(0, 500)
+                                            };
+                                        });
+                                        
+                                        console.log(`Page analysis attempt ${attempt + 1}:`, pageContent);
+                                        
+                                        // Try a more direct approach - look for any recently added elements
+                                        const directDownloadAttempt = await page.evaluate(() => {
+                                            // Look for any element that might be a download button that appeared recently
+                                            const allElements = Array.from(document.querySelectorAll('*'));
+                                            const possibleDownloads = [];
+                                            
+                                            for (const el of allElements) {
+                                                const text = (el.textContent || '').toLowerCase();
+                                                const href = el.getAttribute('href') || '';
+                                                const onclick = el.getAttribute('onclick') || '';
+                                                
+                                                if ((text.includes('download') || text.includes('herunterladen') ||
+                                                    href.includes('download') || href.includes('securedownload') ||
+                                                    onclick.includes('download')) && 
+                                                    getComputedStyle(el).display !== 'none') {
+                                                    
+                                                    possibleDownloads.push({
+                                                        tagName: el.tagName,
+                                                        text: text.substring(0, 100),
+                                                        href: href,
+                                                        onclick: onclick.substring(0, 100),
+                                                        className: el.className,
+                                                        id: el.id
+                                                    });
+                                                }
+                                            }
+                                            
+                                            return possibleDownloads;
+                                        });
+                                        
+                                        console.log(`Direct download search found ${directDownloadAttempt.length} possibilities:`, directDownloadAttempt);
+                                        
+                                        // If we found direct download elements, try clicking them
+                                        if (directDownloadAttempt.length > 0) {
+                                            console.log('Attempting direct download click...');
+                                            const clickResult = await page.evaluate((downloads: any[]) => {
+                                                for (const download of downloads) {
+                                                    // Find and click the element
+                                                    const elements = Array.from(document.querySelectorAll('*'));
+                                                    for (const el of elements) {
+                                                        if (el.tagName === download.tagName && 
+                                                            el.className === download.className &&
+                                                            el.id === download.id) {
+                                                            
+                                                            try {
+                                                                (el as HTMLElement).click();
+                                                                console.log('Clicked direct download element:', el);
+                                                                return true;
+                                                            } catch (e) {
+                                                                console.log('Click failed:', e);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                return false;
+                                            }, directDownloadAttempt);
+                                            
+                                            if (clickResult) {
+                                                console.log('Direct download click succeeded, waiting for response...');
+                                                await new Promise(resolve => setTimeout(resolve, 3000));
+                                                popupHandled = true;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                                 
-                                if (attempt === 9) {
-                                    console.log('No popup detected after 10 seconds, continuing...');
+                                if (attempt === 14) {
+                                    console.log('No popup download button found after 15 seconds, continuing...');
                                 }
                             }
                             

@@ -11,6 +11,7 @@ import { handleVergabeMetropoleruhr } from './hosts/vergabe-metropoleruhr';
 import { handleVergabemarktplatzBrandenburg } from './hosts/vergabemarktplatz-brandenburg';
 import { handleVergabeportalBw } from './hosts/vergabeportal-bw';
 import { handleEvergabeOnline } from './hosts/evergabe-online';
+import { handleEvergabeSachsen } from './hosts/evergabe-sachsen';
 
 // Import general utilities
 import { 
@@ -33,6 +34,9 @@ dotenv.config();
 const WEBSITE_URL = 'https://www.dtvp.de/Satellite/public/company/project/CXP4YAP5BAG/de/documents';
 
 export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: string) {
+    // Special handling for DTVP: always collect tab content regardless of document collection method
+    let tabContentCollected = false;
+    
     // 1) ZIP pathway
     const zipLink = await getZipDocumentLink(documentsPageUrl);
     let files: Map<string, Buffer> | null = null;
@@ -42,6 +46,36 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
         if (zipBuffer) {
             console.log('Extracting documents from ZIP...');
             files = await extractDocumentsFromZip(zipBuffer);
+            
+            // For DTVP, collect tab content even when ZIP download works
+            if (documentsPageUrl.includes('dtvp.de') && files && files.size > 0) {
+                console.log('DTVP detected - collecting additional tab content...');
+                try {
+                    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                    const page = await browser.newPage();
+                    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                    await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
+                    
+                    // Navigate to the documents page first
+                    await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+                    
+                    // Use the DTVP handler to collect tab content
+                    const tabOnlyFiles = await handleDtvp(page, documentsPageUrl);
+                    
+                    // Add any tab content to our existing files
+                    for (const [fileName, fileBuffer] of tabOnlyFiles.entries()) {
+                        if (fileName.includes('Tab_Information')) {
+                            files.set(fileName, fileBuffer);
+                            console.log(`Added tab content: ${fileName}`);
+                        }
+                    }
+                    
+                    await browser.close();
+                    tabContentCollected = true;
+                } catch (error) {
+                    console.log('Failed to collect DTVP tab content:', error);
+                }
+            }
         }
     }
 
@@ -143,8 +177,8 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                 } finally {
                     await browser.close();
                 }
-            } else if (documentsPageUrl.includes('dtvp.de')) {
-                const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+            } else if (documentsPageUrl.includes('dtvp.de') && !tabContentCollected) {
+                const browser = await puppeteer.launch({ headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
                 try {
                     const page = await browser.newPage();
                     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
@@ -153,7 +187,7 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                     // Navigate to the page
                     await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
                     
-                    // Use host-specific handler
+                    // Use host-specific handler (this will collect both documents and tab content)
                     files = await handleDtvp(page, documentsPageUrl);
                 } finally {
                     await browser.close();
@@ -290,6 +324,21 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                 } finally {
                     await browser.close();
                 }
+            } else if (documentsPageUrl.includes('evergabe.sachsen.de')) {
+                const browser = await puppeteer.launch({ headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                try {
+                    const page = await browser.newPage();
+                    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                    await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7' });
+                    
+                    // Navigate to the page
+                    await page.goto(documentsPageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+                    
+                    // Use host-specific handler
+                    files = await handleEvergabeSachsen(page, documentsPageUrl);
+                } finally {
+                    await browser.close();
+                }
             } else {
                 // Use general Puppeteer approach for other hosts
                 files = await collectDocumentsViaPuppeteer(documentsPageUrl);
@@ -340,6 +389,15 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
             } catch (error) {
                 console.log(`❌ Failed to process Excel file: ${error}`);
             }
+        } else if (lower.endsWith('.txt')) {
+            try {
+                const content = fileBuffer.toString('utf-8');
+                allDocumentContent += `\n--- Content from ${fileName} ---\n${content}\n`;
+                processedCount++;
+                console.log(`✅ Text file processed successfully`);
+            } catch (error) {
+                console.log(`❌ Failed to process text file: ${error}`);
+            }
         } else if (lower.endsWith('.zip')) {
             console.log(`📦 Extracting nested ZIP archive...`);
             try {
@@ -377,6 +435,15 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
                         } catch (error) {
                             console.log(`❌ Failed to process nested Excel file: ${error}`);
                         }
+                    } else if (lname.endsWith('.txt')) {
+                        try {
+                            const content = nestedBuf.toString('utf-8');
+                            allDocumentContent += `\n--- Content from ${nestedName} ---\n${content}\n`;
+                            processedCount++;
+                            console.log(`✅ Nested text file processed successfully`);
+                        } catch (error) {
+                            console.log(`❌ Failed to process nested text file: ${error}`);
+                        }
                     } else {
                         console.log(`⏭️ Skipping unsupported nested file format: ${nestedName}`);
                     }
@@ -393,25 +460,39 @@ export async function runDocumentScrapeFromDocumentsPage(documentsPageUrl: strin
 
     if (allDocumentContent.trim()) {
         console.log('\n🤖 Generating AI summary...');
-        const customPrompt = `Please provide a consolidated summary of the following tender documents with the following structure and bullet points:
+        const customPrompt = `Please provide a detailed, comprehensive summary of the following tender documents and webpage information. This content includes both document files AND information extracted from the tender portal's tabs (Übersicht, Verfahrensangaben). Extract ALL specific details, numbers, percentages, point values, and weightings:
 
 1. **Übersicht:**
-   • Abgabefrist
-   • Budget/Finanzvolumen
-   • Vertragslaufzeit
-   • Vergabeart
-   • Status
+   • Abgabefrist (exact date and time)
+   • Budget/Finanzvolumen (exact amounts, ranges, or "Nicht angegeben")
+   • Vertragslaufzeit (exact duration, start/end dates)
+   • Vergabeart (specific type - e.g., VgV, Verhandlungsverfahren mit Teilnahmewettbewerb)
+   • Status (current status)
+   • Projekt-ID/Referenz (if available)
 
 2. **Zusammenfassung:**
-   • Geforderte Leistungen
-   • Eignungskriterien
-   • Zuschlagskriterien
-   • Einzureichende Unterlagen
-   • Formalitäten und Besonderheiten
+   • **Geforderte Leistungen:** List ALL specific services, deliverables, and requirements mentioned (check both documents and tab content)
+   • **Eignungskriterien:** Include ALL specific criteria, minimum requirements, certifications, experience levels, financial requirements, etc.
+   • **Zuschlagskriterien:** Extract ALL point values, weightings, percentages, and detailed breakdowns. For example:
+     - If it says "Qualität (60%)" with subcategories, include ALL subcategories with their point values
+     - If it mentions "Preis (40%)" with specific breakdowns, include ALL price components
+     - Include maximum points for each criterion and subcriterion
+     - Include scoring methodologies and evaluation criteria
+   • **Einzureichende Unterlagen:** List ALL required documents, forms, certificates, etc.
+   • **Formalitäten und Besonderheiten:** Include ALL special requirements, conditions, deadlines, submission formats, etc.
+   • **Kommunikation und Teilnahme:** Information about participation, communication procedures, and submission methods
 
-Please extract the most important information from the documents and present it in a clear, structured format. If certain information is not available in the documents, indicate this with "Nicht angegeben" or "Nicht verfügbar".
+IMPORTANT: For each section, extract and include:
+- Exact numbers, percentages, and point values
+- Specific weightings and scoring systems
+- Detailed breakdowns of criteria
+- All subcategories and their respective values
+- Exact dates, amounts, and requirements
+- Cross-reference information between documents and portal tabs
 
-Here are the document contents:`;
+If information is not available, indicate with "Nicht angegeben" or "Nicht verfügbar".
+
+Here are the combined document contents and portal information:`;
         
         const consolidatedSummary = await summarizeText(allDocumentContent, customPrompt);
         console.log('\n' + '='.repeat(80));

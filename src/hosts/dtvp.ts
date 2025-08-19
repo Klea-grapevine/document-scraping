@@ -1,10 +1,153 @@
 import puppeteer from 'puppeteer';
 
+async function collectTabContent(page: any, currentUrl: string): Promise<string> {
+    let allTabContent = '';
+    
+    try {
+        // Extract base URL and project ID from the current URL
+        const urlParts = currentUrl.split('/');
+        const projectIndex = urlParts.findIndex(part => part === 'project');
+        if (projectIndex === -1 || projectIndex + 1 >= urlParts.length) {
+            console.log('Could not extract project ID from URL');
+            return '';
+        }
+        
+        const projectId = urlParts[projectIndex + 1];
+        const baseUrl = urlParts.slice(0, projectIndex + 2).join('/');
+        
+        console.log(`Collected project ID: ${projectId}, base URL: ${baseUrl}`);
+        
+        // Tab URLs to visit - updated to current DTVP structure
+        const tabUrls = [
+            { url: `${baseUrl}/de/overview`, name: 'Übersicht' },                 // Overview
+            { url: `${baseUrl}/de/processdata/eforms`, name: 'Verfahrensangaben' }, // Procedure (eForms)
+            { url: `${baseUrl}/de/communication/anonym`, name: 'Kommunikation' },  // Public communication
+        ];
+        
+        for (const tab of tabUrls) {
+            try {
+                console.log(`Navigating to tab: ${tab.name} (${tab.url})`);
+                await page.goto(tab.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                
+                // Wait for content to load
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Extract meaningful content from the page
+                const tabText = await page.evaluate((tabName: string) => {
+                    // Remove script and style elements
+                    const scripts = document.querySelectorAll('script, style');
+                    scripts.forEach(el => el.remove());
+                    
+                    // Get main content area
+                    const content = document.querySelector('main, .content, .main-content, .container, body') || document.body;
+                    
+                    // Look for specific sections based on tab type
+                    let specificContent = '';
+                    
+                    if (tabName.includes('Übersicht') || tabName.includes('Overview')) {
+                        // Look for overview-specific content
+                        const overviewElements = content.querySelectorAll('table, .overview, .summary, .details');
+                        overviewElements.forEach(el => {
+                            const text = el.textContent || '';
+                            if (text.includes('VO:') || text.includes('Vergabeart:') || text.includes('Status:') || 
+                                text.includes('Abgabefrist') || text.includes('Budget') || text.includes('Finanzvolumen')) {
+                                specificContent += ' ' + text;
+                            }
+                        });
+                    } else if (tabName.includes('Verfahrensangaben') || tabName.includes('Procedure')) {
+                        // Look for procedure-specific content
+                        const procedureElements = content.querySelectorAll('table, .procedure, .requirements, .criteria');
+                        procedureElements.forEach(el => {
+                            const text = el.textContent || '';
+                            if (text.includes('Zuschlagskriterien') || text.includes('Eignungskriterien') || 
+                                text.includes('Bewertung') || text.includes('Punkte') || text.includes('Gewichtung')) {
+                                specificContent += ' ' + text;
+                            }
+                        });
+                    }
+                    
+                    // If no specific content found, get general content
+                    if (!specificContent.trim()) {
+                        specificContent = content.textContent || '';
+                    }
+                    
+                    // Clean up the text
+                    let text = specificContent.replace(/\s+/g, ' ').trim();
+                    
+                    // Filter out common navigation and footer text
+                    const linesToFilter = [
+                        'Schließen',
+                        'Zurück zum Center',
+                        'Seite drucken',
+                        'DTVP 9.8.4',
+                        'Deutsches Vergabeportal GmbH',
+                        'Systemzeit:',
+                        'Impressum',
+                        'Mandantennummer',
+                        'Bitte warten...',
+                        'Die systemweite interne Identifikationsnummer',
+                        'Teilnehmen',
+                        'Übersicht',
+                        'Verfahrensangaben',
+                        'Teilnahmeunterlagen',
+                        'Kommunikation',
+                        'Teilnahmeanträge'
+                    ];
+                    
+                    const lines = text.split('. ');
+                    const filteredLines = lines.filter(line => {
+                        const cleanLine = line.trim();
+                        return cleanLine.length > 15 && 
+                               !linesToFilter.some(filter => cleanLine.includes(filter));
+                    });
+                    
+                    return filteredLines.join('. ');
+                }, tab.name);
+                
+                if (tabText.trim() && tabText.length > 50) { // Only include substantial content
+                    allTabContent += `\n\n=== Content from ${tab.name} (${tab.url}) ===\n${tabText}`;
+                    console.log(`Successfully extracted content from ${tab.name} (${tabText.length} characters)`);
+                    
+                    // If this is an 'Alt' tab and we already have content for the main tab, skip
+                    if (tab.name.includes('Alt') && allTabContent.includes(`=== Content from ${tab.name.replace(' Alt', '')}`)) {
+                        console.log(`Skipping ${tab.name} as we already have content for the main tab`);
+                        continue;
+                    }
+                } else {
+                    console.log(`No substantial content found at ${tab.name}`);
+                }
+                
+            } catch (error) {
+                console.log(`Failed to load tab ${tab.name}:`, error instanceof Error ? error.message : String(error));
+            }
+        }
+        
+        // Navigate back to documents page
+        console.log('Navigating back to documents page...');
+        await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+    } catch (error) {
+        console.log('Error collecting tab content:', error);
+    }
+    
+    return allTabContent;
+}
+
 export async function handleDtvp(page: any, url: string): Promise<Map<string, Buffer>> {
     const documents = new Map<string, Buffer>();
     
     try {
         console.log('Detected DTVP (Deutsches Vergabeportal) - applying special handling...');
+        
+        // First, collect text content from other tabs (Übersicht and Verfahrensangaben)
+        const tabContent = await collectTabContent(page, url);
+        
+        // Store tab content as a text "document" for summarization
+        if (tabContent.trim()) {
+            const tabContentBuffer = Buffer.from(tabContent, 'utf-8');
+            documents.set('DTVP_Tab_Information.txt', tabContentBuffer);
+            console.log('Successfully collected tab information from Übersicht and Verfahrensangaben');
+        }
         
         // Wait for the page to load completely
         console.log('Waiting for page to fully load...');

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ÜSTRA - eProcurement-System (Ausschreibung)</title>
+  <meta name="description" content="Zusammenfassung und Angebotsinformationen: eProcurement-System für ÜSTRA Hannoversche Verkehrsbetriebe AG" />
+  <style>
+    :root{
+      --primary-coral: #FF5A19;
+      --primary-red: #E61E19;
+      --dirty-white: #F5F5F5;
+      --dark-grey: #55555A;
+      --light-grey: #D2D2D2;
+      --accent-coral: #FF8C64;
+      --accent-light-red: #E69696;
+      --accent-korallenrot: #FAAAA0;
+      --max-width: 1100px;
+      --radius: 12px;
+      --shadow: 0 6px 20px rgba(0,0,0,0.08);
+      --muted: #6b6b6f;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--font-sans);
+      background:linear-gradient(180deg, #ffffff 0%, var(--dirty-white) 100%);
+      color:var(--dark-grey);
+      line-height:1.45;
+      padding:32px 20px;
+      display:flex;
+      justify-content:center;
+    }
+    .container{width:100%;max-width:var(--max-width);background: white;border-radius:16px;box-shadow:var(--shadow);overflow:hidden;border:1px solid var(--light-grey)}
+    header{display:flex;align-items:center;gap:18px;padding:28px 36px;background:linear-gradient(90deg,var(--primary-coral), var(--primary-red));color:white}
+    .logo{width:74px;height:74px;border-radius:10px;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
+    header h1{margin:0;font-size:20px}
+    header p{margin:0;opacity:0.95;font-size:13px}
+    .body{display:flex;gap:24px;padding:28px 36px}
+    main{flex:1}
+    aside{width:320px}
+    .card{background:var(--dirty-white);border-radius:12px;padding:18px;border:1px solid var(--light-grey)}
+    .muted{color:var(--muted)}
+    h2{margin:0 0 10px;color:var(--dark-grey)}
+    h3{margin:0 0 8px;font-size:15px}
+    .grid{display:grid;gap:12px}
+    .key-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .kv{background:white;padding:12px;border-radius:10px;border:1px solid #efefef}
+    .kv strong{display:block;font-size:14px;color:var(--primary-red)}
+    .kv span{display:block;margin-top:6px;color:var(--muted);font-size:13px}
+    .section{margin-bottom:18px}
+    .section p{margin:8px 0}
+    ul{margin:8px 0 12px 20px}
+    ol{margin:8px 0 12px 20px}
+    .specs{display:flex;flex-direction:column;gap:10px}
+    .spec{display:flex;justify-content:space-between;align-items:flex-start;padding:12px;background:white;border-radius:8px;border:1px solid #f0f0f0}
+    .spec .left{max-width:72%}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--primary-red);color:white;font-weight:600;font-size:13px}
+    footer{padding:18px 36px;background:#fafafa;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+    .actions{display:flex;gap:10px}
+    .btn{padding:10px 14px;border-radius:10px;border:none;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--primary-coral);color:white}
+    .btn.ghost{background:white;border:1px solid var(--light-grey)}
+    @media (max-width:900px){.body{flex-direction:column;padding:18px}aside{width:100%}.key-list{grid-template-columns:1fr}}
+    @media print{body{padding:0}.container{box-shadow:none;border:none}header{background:#111;color:white}.actions{display:none}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">ÜSTRA</div>
+      <div>
+        <h1>eProcurement-System — Ausschreibung</h1>
+        <p class="muted">ÜSTRA Hannoversche Verkehrsbetriebe AG — Zusammenfassung &amp; Angebotsinformationen</p>
+      </div>
+    </header>
+
+    <div class="body">
+      <main>
+        <section class="card section">
+          <h2>Übersicht</h2>
+          <div class="grid">
+            <div class="muted">Abgabefrist: <strong>26. August 2025, 10:00 Uhr</strong></div>
+            <div class="muted">Budget/Finanzvolumen: <strong>3.250.000,00 € netto</strong></div>
+            <div class="muted">Vertragslaufzeit: <strong>2 Jahre mit 8 Verlängerungsoptionen über jeweils 12 Monate</strong></div>
+            <div class="muted">Vergabeart: <strong>Verhandlungsverfahren mit Teilnahmewettbewerb</strong></div>
+            <div class="muted">Status: <strong>Veröffentlicht</strong></div>
+            <div class="muted">Projekt-ID/Referenz: <strong>ÜSTRA_eProcurement-System_2_TNW_2025</strong></div>
+          </div>
+        </section>
+
+        <section class="card section">
+          <h2>Geforderte Leistungen (Auszug)</h2>
+          <ul>
+            <li>Implementierung und Bereitstellung eines eProcurement-Systems</li>
+            <li>Einhaltung der Anforderungen an die Informationssicherheit (BSI C5)</li>
+            <li>Durchführung von Vulnerability-Management und Patch-Management</li>
+            <li>Implementierung von Single-Sign-On (OAuth2 oder SAML)</li>
+            <li>Mandantenfähigkeit für ÜSTRA und regiobus</li>
+            <li>Mobile Zugriffsmöglichkeiten (App oder Responsive Design)</li>
+            <li>Integration in bestehende ERP-Systeme</li>
+            <li>Genehmigungsworkflows und Eskalationsfunktionen</li>
+            <li>Lieferantenmanagement und -klassifizierung</li>
+            <li>Umfassendes Reporting und Analyse-Features</li>
+            <li>Betriebs- und Verfügbarkeitskonzept</li>
+            <li>Schulungs- und Trainingskonzept</li>
+          </ul>
+        </section>
+
+        <section class="card section">
+          <h2>Eignungskriterien</h2>
+          <div class="specs">
+            <div class="spec"><div class="left"><strong>Betriebshaftpflicht</strong><div class="muted">Mindestens 1 Mio. Euro für Personen-, Sach- und Vermögensschäden</div></div><div><span class="badge">Versicherung</span></div></div>
+            <div class="spec"><div class="left"><strong>Referenzprojekte</strong><div class="muted">Vergleichbare Projekte der letzten fünf Jahre, Implementation mit mindestens 100 aktiven Nutzern</div></div><div><span class="badge">Nachweis</span></div></div>
+            <div class="spec"><div class="left"><strong>ERP-Anbindung</strong><div class="muted">Nachgewiesene Erfahrung in der Anbindung an ERP-Systeme für Einkaufsprozesse</div></div><div><span class="badge">Integration</span></div></div>
+            <div class="spec"><div class="left"><strong>Sicherheitsstandards</strong><div class="muted">ISO 27001 oder gleichwertiges IT-Sicherheitskonzept erforderlich</div></div><div><span class="badge">Security</span></div></div>
+            <div class="spec"><div class="left"><strong>Qualitätsmanagement</strong><div class="muted">ISO 9001:2015 oder gleichwertige Qualitätssicherung</div></div><div><span class="badge">Qualität</span></div></div>
+          </div>
+        </section>
+
+        <section class="card section">
+          <h2>Zuschlagskriterien</h2>
+          <p><strong>Qualität (Gewichtung 50%, max. 50 Punkte)</strong></p>
+          <ul>
+            <li><strong>Kompetenz und Erfahrung:</strong> max. 75 Punkte (Referenzen)</li>
+            <li><strong>Kundenzufriedenheit:</strong> max. 50 Punkte</li>
+            <li><strong>Technische Anforderungen:</strong> Verschiedene Funktionalitäten (je 2-5 Punkte)</li>
+            <li><strong>Nachhaltigkeit:</strong> Umweltmanagement, Tarifbindung (je 2-3 Punkte)</li>
+          </ul>
+          <p><strong>Preis (Gewichtung 40%)</strong></p>
+          <ul>
+            <li>Bewertung nach Formel: (Günstigster Preis / Angebotspreis) × 100</li>
+          </ul>
+        </section>
+
+        <section class="card section">
+          <h2>Einzureichende Unterlagen</h2>
+          <ol>
+            <li>Teilnahmeantrag (Formblatt)</li>
+            <li>Eigenerklärung zum Nichtvorliegen von Ausschlussgründen</li>
+            <li>Nachweis der Betriebshaftpflichtversicherung</li>
+            <li>Umsatzangaben der letzten drei Geschäftsjahre</li>
+            <li>Liste vergleichbarer Referenzprojekte</li>
+            <li>Grobkonzepte (Rollen-/Rechte, Test, Implementation, Training, etc.)</li>
+            <li>Testsystem-Zugangsdaten</li>
+            <li>Indikatives Erstangebot</li>
+            <li>Vertraulichkeitsvereinbarung (NDA)</li>
+          </ol>
+        </section>
+
+        <section class="card section">
+          <h2>Formalitäten &amp; Besonderheiten</h2>
+          <ul>
+            <li>Elektronische Abgabe über die Vergabeplattform <strong>www.dtvp.de</strong></li>
+            <li>Testsystem muss während der gesamten Verhandlungsphase verfügbar sein</li>
+            <li>Verhandlungsrunde in Präsenz (4 Stunden Dauer)</li>
+            <li>Aufzeichnung der Vergabeverhandlung mit Microsoft Stream</li>
+            <li>Keine Aufteilung in Lose, keine Nebenangebote zugelassen</li>
+            <li>Ausschluss russischer Unternehmen</li>
+          </ul>
+        </section>
+
+        <section class="card section">
+          <h2>Kommunikation &amp; Teilnahme</h2>
+          <ul>
+            <li>Kommunikation ausschließlich über die Vergabeplattform <strong>www.dtvp.de</strong></li>
+            <li>Fragen sind über die Vergabeplattform zu stellen</li>
+            <li>Teilnahmeanträge sind elektronisch bis zur Abgabefrist einzureichen</li>
+            <li>Vertraulichkeitsvereinbarung (NDA) erforderlich</li>
+          </ul>
+        </section>
+      </main>
+
+      <aside>
+        <div class="card section">
+          <h3>Schnellinfo</h3>
+          <div class="key-list">
+            <div class="kv"><strong>Abgabefrist</strong><span>26. August 2025, 10:00 Uhr</span></div>
+            <div class="kv"><strong>Budget</strong><span>3.250.000,00 € netto</span></div>
+            <div class="kv"><strong>Laufzeit</strong><span>2 Jahre + 8×12 Monate</span></div>
+            <div class="kv"><strong>Projekt-ID</strong><span>ÜSTRA_eProcurement-System_2_TNW_2025</span></div>
+          </div>
+        </div>
+        <div class="card section">
+          <h3>Hinweis</h3>
+          <p class="muted">Diese Übersicht ist eine nicht verbindliche Zusammenfassung der Ausschreibungsunterlagen. Maßgeblich sind die Originaldokumente und Angaben auf www.dtvp.de.</p>
+        </div>
+        <div class="card section">
+          <h3>Wichtige Nachweise</h3>
+          <ul>
+            <li>Referenzprojekte der letzten 5 Jahre</li>
+            <li>Betriebshaftpflicht: min. 1 Mio. €</li>
+            <li>ISO 27001 oder gleichwertig</li>
+            <li>Testsystem mit Zugangsdaten</li>
+            <li>Mandantenfähige Software-Erfahrung</li>
+          </ul>
+        </div>
+        <div class="card section">
+          <h3>Technische Highlights</h3>
+          <ul>
+            <li>Single-Sign-On (OAuth2/SAML)</li>
+            <li>Mobile App oder Responsive Design</li>
+            <li>ERP-Integration</li>
+            <li>BSI C5 Sicherheitsstandards</li>
+            <li>Mandantenfähigkeit</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div>
+        <strong>ÜSTRA — eProcurement-System Ausschreibung</strong>
+        <div class="muted">Erstellt: Zusammenfassung (Dokumentenbasis)</div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" onclick="window.print()">Drucken</button>
+        <button class="btn primary" onclick="downloadHTML()">HTML herunterladen</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    function downloadHTML(){
+      const blob = new Blob([document.documentElement.outerHTML], {type: 'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'UESTRA_eProcurement_Tender.html';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

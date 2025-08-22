@@ -97,7 +97,56 @@ export async function handleEvergabeOnline(page: any, url: string): Promise<Map<
             console.log('Content check completed, proceeding with document extraction...');
         }
         
-        // Note: Files will be captured via the browser's download directory monitoring in document-scraper.ts
+        // Set up response interception to capture file downloads BEFORE any clicks
+        const captured: Array<{ fileName: string; buffer: Buffer }> = [];
+        const contentTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument',
+            'application/zip',
+            'application/octet-stream',
+            'binary/octet-stream'
+        ];
+        
+        const guessName = (respUrl: string, headers: Record<string, string>): string => {
+            const cd = headers['content-disposition'] || headers['Content-Disposition'];
+            if (cd) {
+                const m = /filename\*?=([^;]+)/i.exec(cd);
+                if (m) return decodeURIComponent(m[1].replace(/UTF-8''/i, '').replace(/"/g, '').trim());
+            }
+            const urlObj = new URL(respUrl);
+            const pathName = urlObj.pathname.split('/').filter(Boolean).pop() || 'download';
+            return pathName;
+        };
+        
+        // Set up response interception immediately
+        page.on('response', async (resp: any) => {
+            try {
+                const headers = resp.headers() as Record<string, string>;
+                const ct = (headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+                const urlStr = resp.url();
+                const contentLength = headers['content-length'] || headers['Content-Length'];
+                
+                // More comprehensive content type checking
+                const isDocumentResponse = contentTypes.some(t => ct.includes(t)) || 
+                                         /\.(pdf|docx?|zip|xlsx?|txt)(?:[?#].*)?$/i.test(urlStr) ||
+                                         (ct.includes('application/') && contentLength && parseInt(contentLength) > 1000);
+                
+                if (isDocumentResponse) {
+                    console.log(`Potential document response detected: ${urlStr}`);
+                    console.log(`Content-Type: ${ct}, Content-Length: ${contentLength}`);
+                    
+                    const buffer = await resp.buffer();
+                    if (buffer.length > 1000) { // Only capture files larger than 1KB
+                        const name = guessName(urlStr, headers);
+                        captured.push({ fileName: name, buffer });
+                        console.log(`✅ Captured file via response: ${name} (${buffer.length} bytes)`);
+                    }
+                }
+            } catch (error) {
+                console.log('Error capturing response:', error);
+            }
+        });
         
         // Look for ZIP download button with improved error handling
         console.log('Looking for ZIP download button...');
@@ -151,22 +200,46 @@ export async function handleEvergabeOnline(page: any, url: string): Promise<Map<
             
             try {
                 // Click the element and wait for downloads
-                await page.evaluate((index: number) => {
-                    const elements = Array.from(document.querySelectorAll('*'));
-                    const el = elements[index] as HTMLElement;
-                    if (el) {
-                        console.log('Clicking download element...');
-                        el.click();
+                console.log('Attempting to click ZIP download element...');
+                
+                // Try multiple click methods
+                const clickSuccess = await page.evaluate((index: number) => {
+                    try {
+                        const elements = Array.from(document.querySelectorAll('*'));
+                        const el = elements[index] as HTMLElement;
+                        if (el) {
+                            console.log('Clicking download element...');
+                            
+                            // Try different click methods
+                            if (el.tagName.toLowerCase() === 'a') {
+                                // For links, try to follow the href
+                                const href = (el as HTMLAnchorElement).href;
+                                if (href) {
+                                    console.log('Following link:', href);
+                                    window.location.href = href;
+                                    return true;
+                                }
+                            }
+                            
+                            // Try regular click
+                            el.click();
+                            return true;
+                        }
+                        return false;
+                    } catch (error) {
+                        console.error('Click error:', error);
+                        return false;
                     }
                 }, zipButtonResult.index);
                 
-                console.log('ZIP download element clicked, waiting for download...');
+                if (clickSuccess) {
+                    console.log('ZIP download element clicked successfully, waiting for download...');
+                } else {
+                    console.log('Failed to click ZIP download element');
+                }
                 
-                // Wait for the download to initiate (the actual file will be captured by the download directory)
-                console.log('Waiting for download to initiate...');
-                await new Promise(resolve => setTimeout(resolve, 8000));
-                
-                // Note: The actual downloaded files will be captured by the document-scraper's download directory monitoring
+                // Wait for the download to be captured by response interception
+                await new Promise(resolve => setTimeout(resolve, 10000)); // Increased wait time
                 
             } catch (error) {
                 console.log('Error clicking ZIP download button:', error);
@@ -175,8 +248,28 @@ export async function handleEvergabeOnline(page: any, url: string): Promise<Map<
             console.log('No ZIP download button found, looking for individual download links...');
         }
         
+        // If we found a ZIP button but no download was captured, try to extract the direct URL
+        if (zipButtonResult.found && zipButtonResult.href && captured.length === 0) {
+            console.log('ZIP button found but no download captured, trying direct URL...');
+            try {
+                const directUrl = zipButtonResult.href;
+                console.log(`Attempting direct download from: ${directUrl}`);
+                
+                // Import the fetchFileBufferViaPage function
+                const { fetchFileBufferViaPage } = await import('./general');
+                
+                const fetched = await fetchFileBufferViaPage(page, directUrl);
+                if (fetched) {
+                    documents.set(fetched.fileName, fetched.buffer);
+                    console.log(`✅ Direct download successful: ${fetched.fileName}`);
+                }
+            } catch (error) {
+                console.log('Direct download failed:', error);
+            }
+        }
+        
         // If no ZIP documents were found, look for individual document download buttons
-        if (documents.size === 0) {
+        if (captured.length === 0) {
             console.log('Looking for individual document download buttons...');
             
             try {
@@ -247,6 +340,51 @@ export async function handleEvergabeOnline(page: any, url: string): Promise<Map<
                 
             } catch (error) {
                 console.log('Error finding individual download buttons:', error);
+            }
+        }
+        
+        // Also try to find direct document links and fetch them via the page context
+        console.log('Looking for direct document links...');
+        try {
+            const directLinks = await page.evaluate(() => {
+                const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
+                const candidates: string[] = [];
+                for (const a of anchors) {
+                    const href = a.getAttribute('href') || '';
+                    const abs = new URL(href, location.href).href;
+                    if (/\.(pdf|docx?|zip)(?:[?#].*)?$/i.test(abs)) {
+                        candidates.push(abs);
+                    }
+                }
+                return Array.from(new Set(candidates));
+            });
+            
+            console.log(`Found ${directLinks.length} direct document links`);
+            
+            // Import the fetchFileBufferViaPage function
+            const { fetchFileBufferViaPage } = await import('./general');
+            
+            // Fetch each direct link via the page context
+            for (const link of directLinks) {
+                try {
+                    const fetched = await fetchFileBufferViaPage(page, link);
+                    if (fetched) {
+                        documents.set(fetched.fileName, fetched.buffer);
+                        console.log(`Fetched direct link: ${fetched.fileName}`);
+                    }
+                } catch (error) {
+                    console.log(`Failed to fetch direct link ${link}:`, error);
+                }
+            }
+        } catch (error) {
+            console.log('Error processing direct links:', error);
+        }
+        
+        // Consolidate captured responses into documents map
+        for (const c of captured) {
+            if (!documents.has(c.fileName)) {
+                documents.set(c.fileName, c.buffer);
+                console.log(`Added captured file: ${c.fileName}`);
             }
         }
         

@@ -3,6 +3,7 @@ import puppeteer from 'puppeteer';
 
 // Import host-specific handlers
 import { isTedNoticeUrl, extractDocumentsBaseUrlFromTed } from './hosts/ted';
+import { isServiceBundUrl, extractDocumentsPageFromServiceBund } from './hosts/service-bund';
 import { handleVergabeNiedersachsen } from './hosts/vergabe-niedersachsen';
 import { handleSubreportElvis } from './hosts/subreport-elvis';
 import { handleDtvp } from './hosts/dtvp';
@@ -516,8 +517,9 @@ export async function main() {
     let documentsPageUrl = WEBSITE_URL;
 
     if (!argUrl) {
-        console.log('❌ No URL provided. Usage: npm start <TED_URL_OR_DOCUMENTS_URL>');
+        console.log('❌ No URL provided. Usage: npm start <TED_URL_OR_SERVICE_BUND_URL_OR_DOCUMENTS_URL>');
         console.log('Example: npm start "https://ted.europa.eu/de/notice/-/detail/488905-2025"');
+        console.log('Example: npm start "https://www.service.bund.de/IMPORTE/Ausschreibungen/dtvp/2025/08/288749.html"');
         console.log('Example: npm start "https://www.dtvp.de/Satellite/notice/CXP4YDK5GK4/documents"');
         return;
     }
@@ -535,6 +537,22 @@ export async function main() {
             console.log('💡 This might be because:');
             console.log('   - The notice doesn\'t have document links yet');
             console.log('   - The document URL is in a different format');
+            console.log('   - The page structure has changed');
+            return;
+        }
+    } else if (isServiceBundUrl(argUrl)) {
+        console.log(`📋 service.bund.de notice detected: ${argUrl}`);
+        console.log('🔍 Extracting documents page URL from service.bund.de notice...');
+        
+        const extracted = await extractDocumentsPageFromServiceBund(argUrl);
+        if (extracted) {
+            documentsPageUrl = extracted;
+            console.log(`✅ Successfully extracted documents page URL: ${documentsPageUrl}`);
+        } else {
+            console.log('❌ Could not extract documents page URL from service.bund.de notice.');
+            console.log('💡 This might be because:');
+            console.log('   - The notice doesn\'t have a "Bekanntmachung (HTML-Seite)" link');
+            console.log('   - The link doesn\'t lead to a DTVP page');
             console.log('   - The page structure has changed');
             return;
         }
